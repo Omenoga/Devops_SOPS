@@ -1,0 +1,22 @@
+SOP - AWS Network load balancer creation and routing with Route 53 (route connection based on layer 4 IP protocol)
+1)	 Create VPC and subnets (I created one VPC in Ohio with subnets in us-east-2a, 2b and 2c). I used CIDR block 10.10.0.0/24 by selecting VPC and more for more options.
+a.	This step would create the VPC and all its components (IGW to the VPC, route table, associate S3 endpoint with private subnet route tables)
+2)	Create webservers in public subnets make sure access ports are open 8080 (tomcat port), port 80 and 22 for SSH if needed
+a.	Do not forget to Enable auto assign public IP.
+b.	You can check on command line if apps are running with curl localhost:8080
+3)	Create Target groups
+a.	Choose target type (Instances, IP addresses, Lambda function, Application load balancer)
+b.	Choose target group name
+c.	Choose protocol (TCP:80 since this target group would be put behind a network load balancer)
+d.	Healthy threshold (number of requests to be made through traffic port for it to confirm target is alive)
+e.	Tags (optional) 
+f.	Next, select your targets and targets for ports. In use case 8080 (tomcat app servers)
+g.	Include as pending and click on create target group.
+4)	Create Network load balancer
+a.	Choose the type of load-balancer you need (ALB, NLB or gateway load balancer)
+b.	Enter name and select Scheme (Internet facing or internal)
+c.	In network mapping, select VPC for your targets including mappings to different availability zones.
+d.	In mapping make sure they are mapped to public subnets so that the targets can be reached via the internet.
+e.	Choose listener port for load balancer (e.g., TCP:80). Forward to Select default action (TG TCP that you have created)
+f.	Use NLB DNS to access health targets
+g.	Optional - under Route 53, you can create hosted zone e.g., 29demo.click and create record to route traffic from DNS to NLB (A – route traffic), alias name.
