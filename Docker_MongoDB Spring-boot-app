@@ -1,0 +1,18 @@
+Project Steps: Complete these steps with Jenkins or directly on command line
+** Note step 1-4 will pull source code from github, build image according to specified docker file in github and push the image to specified repository in dockerhub. It can all be automated using Jenkins.
+1.	git clone https://github.com/Omenoga/spring-boot-docker.git
+2.	docker build -t spring .
+3.	docker tag spring:latest omenoga/spring-boot-mongo:1
+4.	docker push omenoga/spring-boot-mongo:1
+5.	** docker run –name spring -d -p 7000:8080 omenoga/spring-boot-mongo:1 (don’t run this step until you want to run your container, see step 7 for how the container is run using environmental tags)
+Phase two: Pull mongo db image from docker hub and run both spring app and mongodb with environmental variables
+6.	Initialize your mongodb database and pass environmental variables
+a.	docker run -d --network fintech --name mongodb \
+i.	-e MONGO_INITDB_ROOT_USERNAME=omenoga \
+ii.	-e MONGO_INITDB_ROOT_PASSWORD=admin123 \
+iii.	mongo
+7.	Run springapp and run environmental variables to make sure springapp is connected to mongodb
+docker run --name spring -d -p 80:8080 --network fintech 
+-e MONGO_DB_USERNAME=omenoga \
+-e MONGO_DB_PASSWORD=admin123 \
+ -e MONGO_DB_HOSTNAME=mongodb  omenoga/spring-boot-mongo
