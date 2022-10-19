@@ -1,0 +1,113 @@
+Jenkins-Docker-Kubernetes Integration
+
+#1) Install and configure docker on ubuntu\
+sudo apt update
+sudo apt install docker.io -y
+sudo systemctl enable docker.service
+sudo systemctl start docker
+
+#2)Install, start and configure jenkins
+sudo wget -q -O - https://pkg.jenkins.io/debian-stable/jenkins.io.key | sudo apt-key add -
+sudo sh -c 'echo deb https://pkg.jenkins.io/debian-stable binary/ > \
+    /etc/apt/sources.list.d/jenkins.list'
+sudo apt-get update
+sudo apt install openjdk-11-jre-headless
+sudo apt-get install jenkins -y 
+sudo systemctl start jenkins 
+sudo usermod -aG  docker jenkins
+sudo systemctl restart docker.service
+sudo echo "jenkins  ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/jenkins" 
+#3)Configure kubernetes cluster using kops on AWS
+#a) Install AWSCLI
+ sudo apt install unzip wget -y
+ sudo curl https://s3.amazonaws.com/aws-cli/awscli-bundle.zip -o awscli-bundle.zip
+ sudo apt install unzip python3 -y
+ sudo unzip awscli-bundle.zip
+ sudo ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
+ OR
+ sudo apt install awscli
+
+ or sudo apt install awscli
+#b) Install kops on ubuntu instance
+  sudo apt install wget -y
+  sudo wget https://github.com/kubernetes/kops/releases/download/v1.16.1/kops-linux-amd64
+  sudo chmod +x kops-linux-amd64
+  sudo mv kops-linux-amd64 /usr/local/bin/kops
+#c) Install kubectl
+ sudo curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+ sudo chmod +x ./kubectl
+ sudo mv ./kubectl /usr/local/bin/kubectl
+ 
+#d) create IAM role from console or CLI
+  AmazonEC2FullAccess 
+  AmazonS3FullAccess
+  IAMFullAccess 
+  AmazonVPCFullAccess
+
+#e) create s3 bucket in KOPS server
+aws s3 mb s3://omenogak8.local
+aws s3 ls
+
+# add environmental variables in bashrc
+vi .bashrc
+
+Give unique name and 3s bucket you created
+export NAME=admin.29demo.click
+  export KOPS_STATE_STORE=s3://omenogak8.local
+ 
+    source .bashrc
+#4) Create SSH Keys before creating cluster so that you are able to access it
+kops create cluster --zones us-west-2a --networking weave --master-size t2.medium --master-count 1 --node-size t2.medium --node-count=2 ${NAME}
+
+#copy secret into cluster so you can communicate with it
+kops create secret --name ${NAME} sshpublickey admin -i ~/.ssh/id_rsa.pub
+
+#5) Create kubernetes cluster 
+
+kops update cluster ${NAME} --yes
+
+#copy suggestions from CLI after executing above
+Suggestions:
+ * validate cluster: kops validate cluster
+ * list nodes: kubectl get nodes --show-labels
+ * ssh to the master: ssh -i ~/.ssh/id_rsa admin@api.admin.29demo.click
+ * the admin user is specific to Debian. If not using Debian please use the appropriate user based on your OS.
+ * read about installing addons at: https://github.com/kubernetes/kops/blob/master/docs/operations/addons.md.
+
+
+ #6) Since kops has created a loadbalancer, you can access your application with the URL of your load balancer
+
+ http://a0b91f26272f740b8af662c7746a5338-1196819102.us-west-2.elb.amazonaws.com/
+
+Maven pipeline script
+======================
+
+node{
+  def mavenHome = tool name: 'maven3.8.6'
+  stage('1cloneCode'){
+    git "https://github.com/Omenoga/spring-boot-docker.git"
+  }
+  stage('2Test&Build'){
+    sh "${mavenHome}/bin/mvn clean package"
+    //bat "${mavenHome}/bin/mvn clean package"
+  }
+  stage('3codeQuality'){
+    //sh "${mavenHome}/bin/mvn clean sonar:sonar"
+  }
+  stage('4DockerBuild'){
+    sh 'docker build -t omenoga/spring-boot-mongo .'
+}
+  stage('5DockerPush'){
+ withCredentials([string(credentialsId: 'b81d9773-d97b-41a8-a63a-815a49f5be33', variable: 'Docker_Credentials')]) {
+    sh 'docker login -u omenoga -p ${Docker_Credentials}'
+}
+   
+    sh 'docker push omenoga/spring-boot-mongo'
+}
+stage('6RemoveImages'){
+    sh 'docker rmi $(docker images -q)'
+}
+ stage('5deployAppToK8S'){
+    sh 'kubectl apply -f springapp.yml'
+}
+}
