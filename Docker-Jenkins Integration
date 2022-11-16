@@ -1,0 +1,95 @@
+You can use this set up for your development environment by running some of your tools as containers in order to save cost.
+
+Pre-planning
+Instance type: t2.2xlarge used [ 8vCPU, 32GiB RAM, 10GiB root volume (upgraded from default 8GiB default)]
+
+sonarqube requirements: 2GB of RAM to run efficiently and 1GB of free RAM for the OS
+sonatype nexus requirements: 8 CPU cores and 8GB of RAM. A minimum of 6GB of process space should be available
+
+Additional commands: docker exec nexus cat [to run commands in nexus container]
+					           sudo vi /tools/hudson.tasks.Maven_MavenInstallation/maven3.8.6/conf/settings.xml [add server tag to grant authentication to run mvn deploy to nexus repository]
+
+                    docker logs <containername> to see why a container is failing
+
+Step 1: Install docker
+#!/bin/bash
+# Ubuntu 18.04 server installed with a non-root sudo user and firewall. 32GB memory. 8GIG root Volume
+#The script below is to set your hostname, install docker on your server, and add ubuntu to the docker group in order to run docker commands.
+sudo hostnamectl set-hostname docker
+sudo apt update -y 
+sudo apt install docker.io -y
+sudo usermod -aG docker ubuntu
+sudo su - ubuntu
+
+Step 2: Install Jenkins on ubuntu server
+#!/bin/bash
+#This script will add jenkins repository key to server sources, install jenkins, add jenkins user to the docker group and give jenkins-user sudoers right.
+sudo apt update 
+sudo apt install openjdk-11-jre-headless -y
+sudo wget -q -O - https://pkg.jenkins.io/debian-stable/jenkins.io.key | sudo apt-key add
+sudo sh -c 'echo deb https://pkg.jenkins.io/debian-stable binary/ > /etc/apt/sources.list.d/jenkins.list'
+sudo apt update && sudo apt install jenkins -y 
+sudo systemctl start jenkins
+sudo usermod -aG docker jenkins
+sudo systemctl restart docker.service
+sudo systemctl enable docker.service
+sudo echo "jenkins  ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/jenkins
+
+Step 3: Pull images of CI/CD tools from dockerhub and create containers
+- sonarqube [docker pull sonarqube] 
+- sonatype/nexus [docker pull sonatype/nexus3] 
+
+
+Step 4: Start your containers from pulled images
+- sonarqube 
+docker run -d -p 9000:9000 --name sonarqube sonarqube
+- sonatype/nexus 
+docker run -d -p 8081:8081 --name nexus sonatype/nexus3
+
+Step 4: Log into Jenkins and Integrate your CI/CD tools
+- github (git installed, poll SCM etc)
+- maven (tool configuration)
+- sonarqube (pom.xml tags)
+- nexus (pom.xml tags, create repositories, server tag (see additional commands list))
+- docker (configure login credentials)
+
+Step 5: Create credentials for docker login
+- Go to pipleinesyntax
+- Select with Credentials:Bind credentials to variables
+- Select Secret text [variable = Docker_Credentials]
+- Add [Kind = secret text], enter secret text under secret
+- Generate Pipeline Script
+
+Step 6: Automate steps build steps with pipeline script
+
+node{
+  def mavenHome = tool name: 'maven3.8.6'
+  stage('1cloneCode'){
+    git "https://github.com/Omenoga/tesla-app19.git"
+  }
+  stage('2Test&Build'){
+    sh "${mavenHome}/bin/mvn clean package"
+    //bat "${mavenHome}/bin/mvn clean package"
+  }
+  stage('3codeQuality'){
+    sh "${mavenHome}/bin/mvn sonar:sonar"
+  }
+  stage('4Backup'){
+    sh "${mavenHome}/bin/mvn deploy"
+  
+  stage('5DockerBuild'){
+    sh 'docker build -t omenoga/team19-app .'
+}
+  stage('6DockerPush'){
+ withCredentials([string(credentialsId: 'Docker', variable: 'Docker_Credentials')]) {
+    sh 'docker login -u omenoga -p ${Docker_Credentials}'
+    
+}
+    sh 'docker push omenoga/team19-app'
+}
+stage('deployment'){
+    sh 'echo application ready for deployment'
+    sh 'docker run --name myapp -d -p 2000:8080 omenoga/team19-app'
+}
+}
+}
