@@ -7,8 +7,7 @@ sonarqube requirements: 2GB of RAM to run efficiently and 1GB of free RAM for th
 sonatype nexus requirements: 8 CPU cores and 8GB of RAM. A minimum of 6GB of process space should be available
 
 Additional commands: docker exec nexus cat [to run commands in nexus container]
-					           sudo vi /tools/hudson.tasks.Maven_MavenInstallation/maven3.8.6/conf/settings.xml [add server tag to grant authentication to run mvn deploy to nexus repository]
-
+		     sudo vi /tools/hudson.tasks.Maven_MavenInstallation/maven3.8.6/conf/settings.xml [add server tag to grant authentication to run mvn deploy to nexus repository]
                     docker logs <containername> to see why a container is failing
 
 Step 1: Install docker
