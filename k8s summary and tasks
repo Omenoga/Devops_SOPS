@@ -1,0 +1,183 @@
+Kubernetes project
+
+Things covered so far
+1) Kubernetes architecture
+========================== 
+	We can make api calls in our kubernetes cluster using CLI- kubectl or GUI-dashboards. We require authentication from .kube/config file to make api calls)
+    Master Node (control plane consists of  api server, scheduler, etcd, controller managers - node controller, replication controller, end point controllers, daemon set controllers, 
+    deployment controllers etc.)
+    Worker Nodes (kubelet-establish connection with control plane, container run time/container-d, kubeproxy)
+	- Kubernetes cluster (Self managed - minikube, docker desktop, kubeadm (multinode) or cloud managed- eks, kops, aks, gke)
+	#Task 1: set up production ready cluster in aws (KOPS- kubernetes operation software)
+2a) Deployments
+================
+	#Task 2a: deploy workloads in k8s using imperative and declarative
+	- Imperative: 
+	kubectl run apps --image=mylandmarktech/hello --port=80 (deploys the application)
+	kubectl expose pod webapp --port=80 --type=NodePort (creates service for application)
+	- Declarative: using k8s manifest file (kubectl apply - f <filename>)
+	#Task 2b: Spring boot application deployment with service, create deployment and use kubectl edit deploy to update image and kubectl rollout undo deployment to undo previous image w/o downtime
+
+	Controller managers (fixes the problem of pods not being able to scale and having short lifespan i.e if the node it is on dies it will not be scheduled to new node, it ensures specified number of pod replicas are running at any given time i.e controllers manage the pod state):
+	- RC
+	- RS (next gen RC, supports match expressions for selectors)
+	- DaemonSet (similar to global mode in docker swarm while RS and RC similar to replica mode)
+	- Deployment (default strategy is rolling update unless otherwise specified, other is recreate-this has downtime)
+	- StatefulSet (used to deploy pods that have sticky identity to make sure the pod retains its state and role even after it dies)
+	
+
+2b) Service discovery
+	- cluster IP
+	- nodePort (3000-32767)
+	- Loadbalancer
+	- External Name:special case of service that does not have selectors. It does not define any ports or endpoints. Rather, it serves as a way to return an alias to an external service residing outside the cluster (i.e map the service to a DNS name instead of ports)
+
+	e.g 
+	kind: Service
+	apiVersion: v1
+	metadata:
+	  name: my-service
+	  namespace: prod
+	spec:
+	  type: ExternalName
+	  externalName: my.database.example.com
+
+2c) Managing deployments from GUI
+	#Task 3: set up rancher dashboard
+2d) Writing YAML files (what are the components of a manifest file). 
+	KAMS
+	Api versions: kubectl api-resources | grep pods
+	i) v1 was the first stable release of k8s API and contains many core objects (pod, service, replication controller)
+	ii) apps/v1 includes many functions for running applications on k8s. (Deployment, ReplicaSets)
+	iii) batch/v1 for objects related to batch processing and job like tasks (e.g cron jobs)
+	Other specifications
+	- nodeSelector
+	- pod affinity
+
+3) Volumes/ Persistent Volumes and storage class
+	- Volumes are used in kubernetes when deploying stateful sets e.g MongoDB database. The volumes can be defined using host path or network file system
+	- Volumes in k8s are easy to manage. They are basically a directory that gets mounted to a pod
+	- storage class could be manual (managed by k8s admin) or dynamic eks/kops (when pod claims storage via pvc, pvc requests storage from storage class)
+
+4) Secrets & Config Maps
+	- ConfigMaps are used to store data in key value form, it stores data in clear text and can be used for passing additional configuration [pass this under environmental variable]
+			-name:Mongo_DB_PASSWORD
+			valueFrom:
+				configMapKey Ref:
+					name: mongo-configMap
+					key: db-password
+	- Secrets are stored in encrypted form
+	#Task 4: Create Secrets and config map objects and use them to pass environmental variables
+
+5) Probes in k8s/ healthchecks
+	- liveliness (failing liveliness probe would restart the container)
+	- readiness probes (used if we would like our application to be alive, but not serve traffic unless some conditions are met)
+	- startup probes (for slow starting containers. They run before any other probe, and, unless it finishes successfully, disables other probes. If a container fails its startup probe, then the container is killed and follows the pod’s restartPolicy)
+
+6) Managing Resources
+   - Scaling
+   	i) HPA (scales # of pods in a RC, RS, deployment based on observed CPU or memory utilization which it gets through interaction with metric server)
+   	ii) VPA (Vertical pod aiutoscaler increases the resources in a particular pod)
+   	iii) CAS (Cluster autoscaler - creates new nodes)
+   #Task 5, install metric server and run commands kubectl top nodes, kubectl top pods, kubectl get hpa
+   - Resource Quota
+   	A resource quota, defined by a ResourceQuota object, provides constraints that limit aggregate resource consumption per namespace. If creating or updating a resource violates a quota constraint, the request will fail with HTTP status code 403 FORBIDDEN with a message explaining the constraint that would have been violated
+   - nodeSelector, node affinity, pod affinity
+   	Assigning and constraining pods to nodes: there are some circumstances where you may want to control which node the Pod deploys to, for example, to ensure that a Pod ends up on a node with an SSD attached to it, or to co-locate Pods from two different services that communicate a lot into the same availability zone.
+   	i) nodeSelector; is the simplest recommended form of node selection constraint. You can add the nodeSelector field to your Pod specification and specify the node labels you want the target node to have. Kubernetes only schedules the Pod onto nodes that have each of the labels you specify. If there is no existing node with the label, the pod will stay in the pending status since this is a hard preference
+   	ii) node affinity: functions like the nodeSelector field but is more expressive and allows you to specify soft rules
+		Expressions:
+		requiredDuringSchedulingIgnoredDuringExecution: The scheduler can't schedule the Pod unless the rule is met. This functions like nodeSelector, but with a more expressive syntax.
+		preferredDuringSchedulingIgnoredDuringExecution: The scheduler tries to find a node that meets the rule. If a matching node is not available, the scheduler still schedules the Pod.
+		preferredDuringSchedulingRequiredDuringExecution:
+		Operator: Can be In or NotIn
+		iii) pod affinity: introduces topologyKey (same place, same server, az, region etc.), you can use operator:In to make sure two pods with matching labels labelSelector are scheduled in same AZ or use
+		NotIn operator to ensure they are not scheduled in same server (e.g if both pods consume a lot of resources)
+		- Priority classes: high, low or medium priority
+	#Task 6: Create resource quota for a namespace and try to deploy an application in it that passes that quota
+
+7) Managing 3rd Party applications with helm (helm is a package manager for kubernetes, we use helm 3 at work and this interacts directly with k8s i.e no tiller component)
+	#Task 7: create a custom helm repository
+	- Prometheus and grafana
+	- nginx ingress
+	 i) host-based routing java.29demo.click
+	 ii)path-based routing dominionapp.net/login
+	 Note, path based routing is good for microservices
+	# Task 8: Deploy nginx ingress using helm charts and set up ingress rules for host-based and path based routing.
+8) Kubernetes Monotoring
+
+	Prometheus and the Elasticsearch stack are both used for monitoring applications. But while Prometheus is primarily meant to monitor metrics, the Elasticsearch stack or the ELK stack is mainly used to collect, store, analyze, and visualize application logs
+
+	- metrics server (seen under HPA, CAS, VPA)
+
+	- EFK/ELK (Elastic search, filebeat and kibana / Elastic search logstash and kibana)
+	EFK/ELK bring in log aggregation for smooth functioning of production grade k8s cluster
+	i)Elasticsearch acts as a container to store logs and does indexing
+	ii)Kibana used for visualization
+	iii) Logstash enhances the data and sends it to elasticsearch
+	iv) Beats are open source data shippers that can be installed as agents on servers to send operational data directly to elasticsearch or via logstash
+		- filebeat(files)
+		-metricbeat(metrics)
+		-packetbeat(network data)
+		-Heatbeat (uptime)
+
+	- Prometheus node exporters (grafana for visualization).Prometheus provides a visualization layer called the Expression browser. But it’s quite basic in nature. Prometheus is often combined with Grafana, an open-source data visualization tool to provide richer dashboards. Prometheus is an opensource monitoring and alerting toolkit.
+	Node exporter collects info about your nodes and kubestate metrics collects information about kubernetes objects. Alert manager is one of the features of prometheus and provides capabilities to group alerts in a single notification
+
+
+	#Task9: Deploy prometheus and grafana in the apm namespace and accesss them on the dashboard
+	#Task10: Deploy EFK and create ingress rule for kibana to view logs
+
+9) Kubernetes security
+	3 kinds of users that need to access a k8s cluster
+	- Developers/Admins
+	- End Users
+	- Applications/Bots
+
+Some k8s Security best practices
+i) Scan your images - use synk or datadog to scan docker images before pushing to docker hub and you can also scan these images while in the registry e.g docker scan
+ii)Run containers as non-root so that even though they are hacked it will not be easy for hacker to gain privilegded escalation. User 0 is root and 1000 non-root. This run as user can be entered in pod 
+	definition under security context
+	security context:
+		runAsuser:1000 [non-root]
+iii) Use Network rules and service mesh e.g istio (app or service level and uses proxy in each pod with side car container pattern) to define communication rules between pods
+iv) Use mutual TLS between pods to encrypt communication between them
+v) Secure secret data - enable encryption using encryptionconfiguration resource, you can use third party tools like AWS KMS and Hashicorp vault to manage the encryption key
+vi) Secure ETCD store- Since changes in etcd store can result in changes in the cluster, hackers can bypass api and make changes in your cluster through etcd therefore put etcd behind firewall and only allow API Server access to it.
+vii) Automated backup and restore for your data
+viii) Configure security policies - e.g network ploicy has to be defined for each pod and dont allow pods run containers. These can be done with 3rd party engines e.g Open Policy Agent (OPA). These policies you create are hooked into the admissions controller
+ix) Automatic disaster recover to recover backed up data to platform of your choice should issues arise.
+
+- Namespaces (virtual cluster inside your k8s cluster. useful for security, isolation and resource allocation)
+	Default, kube-system (deployments made here can cause irreparable damage to the system) and kube-public (readable by everyone but system is reserved for system usage)	
+	#Task 11, create ns and set it as our default namespace
+	kubectl create ns team19
+	kubectl config set-context --current --namespace=team19
+- RBAC
+	This is based on three key concepts
+	i) Verbs (set of operations that can be executed on a resource)
+	ii) API Resources (objects available on the clusters that make up k8s)
+	iii) Subjects (Objects allowed to access the api based on verbs and resources)
+
+- Role vs Cluster Role (Both represent a set of permissions, Role sets permissions within a certain namespace and clusterrole is non-namespaced)
+
+	Role Content (KAM + Rules), Role Binding Content (KAM + subjects + roleRef), ConfigMaps (KAM + data)
+
+	kind: Role
+	apiVersion: rbac.authorization.k8s.io/v1
+	metadata:
+	  namespace: default
+	  name: readonly
+	rules:
+	- apiGroups: [""]  # v1 = pods services
+	  resources: ["*"]
+	  verbs: ["*"]
+	- apiGroups: ["apps"]
+	  resources: ["deployments","replicasets","daemonsets"]
+	  verbs: ["get","list"]
+
+	kubectl get sa -A [to see all existing service accounts and the policies attached]
+
+	Note: Using this RBAC approach allows for more secure and granular design. Each application can have different access. IRSA(IAM roles for service accounts replaces kube2iam)
+
+	#Task12: Create role and role binding to enable subjects perform specific tasks in k8s.
