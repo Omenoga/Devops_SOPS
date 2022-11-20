@@ -1,0 +1,207 @@
+Terraaform:
+1) Basic concepts - What is terraform - iac/ vendor- hashicorp
+                  - manages provisioning/configuration of infra
+                  - declarative
+                  - creates infra in modular components
+                  - cloud agnostic
+
+                  benefits -speed, consistency,reduce costs, reduce errors
+
+  2: Manifest files - declarative syntax HCL - .tf, .tf.json
+  3. Terraform commands: Terraform init - Initialise the working directory
+                                 performs- backend init, module installation,provider plugin,create a lockfile
+                         Terraform validate: - syntax
+                         Terraform fmt -recursive: - lint into standard format
+                         Terraform plan: - execution plan / modify the infra / scan all *.tf files and generate a plan   (  terraform plan -out=tfplan)
+                         Terraform apply: - scan the .tf files and applies the changes (terraform apply tfplan) -auto-approve
+                         Terraform refresh: - Used to reconcile the state that terraform knows with the real world infra
+                         Terraform destroy: - modifies both statefile and infra / destroys the targeted resources
+                         Terraform import: brings already existing / external infra/ resources that are not managed by terraform
+                         Terraform state rm: command removes bindings from the Terraform state, causing Terraform to "forget about" existing objects
+                         terraform taint: - marks a managed resource as tainted, forcing it to be destroyed and recreated on the next apply
+    4. Top level blocks:
+      1) Terraform settings block:
+
+      terraform {
+        required_version = "=0.13 1.24"     
+        required_providers {
+          aws = {
+            source  = "hashicorp/aws"
+            version = "= 4.27.0"
+       }
+      }
+       # Adding Backend as S3 for remote state storage with state locking
+       
+
+      2) provider block:
+        provider "aws" {
+          profile = "Ken" # AWS Credentials Profile configured on your local desktop terminal  $HOME/.aws/credentials
+          region  = "us-west-2"
+        }
+         aws configure  secret key/access key
+
+      3) resource block:
+          resource "aws_instance" "inst1" {
+             ami           = "ami-0e5b6b6a9f3db6db8" # Amazon Linux
+             instance_type = t2.micro
+            }
+
+          resource "aws_instance" "inst2" {
+             ami           = "ami-0e5b6b6a9f3db6db8" # Amazon Linux
+             instance_type = t2.micro
+            }
+      4) Variables block:
+
+        IQ: How do you make a variable require a value?
+        ANS: By removing the default, when you do this a user has to enter a value of their own.
+
+      5) Output block:
+
+        value = resourcetype.resourcename.attribute
+
+      6) Data block:
+
+        To get data dynamically from provider e.g AWS
+
+      7) modules:
+
+        IQ: Experience with terraform modules
+
+        I have used both official and custom modules to provision resource. Custom modules can be stored in your pwd or in a distributed environment
+        such as git/github.
+
+        IQ: What is a terraform module?
+
+        A Terraform module is a collection of standard configuration files in a dedicated directory. Root module is collection of files in the initialized directory and where you are running 
+        terraform commands from and child directory is any directory within that which you are referencing from.
+
+        IQ: At what stage in the terraform flow is your state file created?
+
+        It is first created when you run terraform plan but this is an empty statefile and would dissapear shortly after. This is only populated and persists after you run terraform apply 
+        and create resources.
+
+        Note: statefile will have version, terraform version, serial number and lineage. The higher your serial number, the more current your statefile.
+
+        IQ: How do you manipulate resources within the terraform state file? 
+
+        You use state commands and not edit your statefile because editing your statefile will corrupt it. If you want to remove a particular resource from statefile, you can run
+
+        terraform state rm <resource-full-name> Note that this resource name can be gotten by running another state command terraform state list
+        ---------------------------------------                                                                             ---------------------
+
+        IQ: Asked to update resources using docker as a provider in terraform. Given a script and asked to make it easier to add and update resources in docker
+
+        https://github.com/kreuzwerker/terraform-provider-docker
+
+        The Docker provider is used to interact with Docker containers and images. It uses the Docker API to manage the lifecycle of Docker containers. Because the Docker provider 
+        uses the Docker API, it is immediately compatible not only with single server Docker but Swarm and any additional Docker-compatible API hosts.
+
+        Answer: This is refactoring, solution is to modularize the script, break it down into modules, using tfvars files with different configurations for different environment
+
+        For the docker file - main.tf, images.tf, containers.tf, provider.tf, variables.tf
+
+        Note: You can use specific tfvars file while running command if you pass the -var-file prod.tfvars
+
+
+        IQ: How do you deal with deploying in different environments.
+
+        You can use Variables files e.g prod.tfvars, dev.tfvars and pass regions and other configurations while still using the same underlying modules
+
+        e.g in dev.tfvars
+        image = "nginx:1.5"   
+        region = "us-east-1"
+
+        You can also use workspaces if you use terraform cloud to isolate your environment.
+
+        Terraform video 4
+        ===================
+
+        Job task: Boss asks you to rename an instance that has already been created in the resource block. How would you do it?
+
+        Answer: do not just update name and apply in resource.tf because this will destroy existing instance and create new one with new name 
+
+        Use terraform moved block in resources.tf
+
+        e.g 
+
+        moved {
+          from = aws_instance.demo.ec2_2
+          to = aws_instance.dev
+        }
+
+
+        IQ: What is your experience using data sources in terraform?
+
+        Creating ec2 instance using VPC from distributed state file in S3 bucket. 
+
+        resource "aws_instance" "my-ec2"
+        ami = data.aws_ami.amzlinux2.id
+        instance_type = "t2.micro"
+        subnet_id = data.terraform_remote_state.netwrok.outputs.public_subnets[1] #this subnet is picked from the terraform state file using the data block below
+        tags = {
+          "Name" = "my-ec2"
+         }
+        }
+
+        data "terraform_remote_state" "network" {
+
+         backend = "s3"
+         config = {
+          bucket = 
+          "my-terraformstate-landmark-buc"
+          key = "terraform/terraform.tfstate"
+          region = "us-west-1"
+
+         }
+        }
+
+
+        IQ: In your environment, how do you manage the different versions of terraform?
+
+       We constrain the versions in our settings block to the minor version to avoid our code from breaking
+
+        IQ: How have you used terraform Null Resources:
+        We use this as a do nothing container for arbitrary actions taken by a provisioner
+
+        It is mostly used with provisioners such as local exec and remote exec. The null resource is created when the command is executed, this happens when the instance status is okay (i.e it is done 
+        initializing). We can also use nuoll resource and connection block to SSH into a server if you want to copy files with terraform. 
+
+        e.g
+
+        resource "null resource" "status" {
+          provisioner "local-exec" {
+            command = "aws ec2 wait instance-status-ok --instance-ids ${aws_instance.my_server}
+          }
+
+          depends_on = [
+            aws_instance.my_server]
+        }
+
+        Types of provisioners:
+
+        File provisioner: Copy files (it has source and destination in the block)
+        Remote-exec provisioner: run commands in remote machine through SSH
+        Local-exec: will run script on your local machine (e.g command = "echo provisioner completed")
+
+
+
+        Meta Arguments for resource creation
+        depends_on = [ time_sleep.wait_for_instance]
+
+        Time Sleep Resources:
+        to implement some delay before resources creation.
+
+          Issues using tfenv in environment due to SSL certificates. 
+          Ran the commands below to resolve
+
+          echo insecure >> ~/.curlrc
+          echo 'trust-tfenv: yes' > ~/.tfenv/use-gpgv
+
+        Using terraform import command:
+          ================================
+
+          Step 1: Enter resource config block in terraform. Running command in step two will give you what you need to add to resource block
+
+          Step 2: Run terraform import <aws_instance.name> <instance.id>
+
+          Step 3: minimum specification of ami and instance type after resource is c
